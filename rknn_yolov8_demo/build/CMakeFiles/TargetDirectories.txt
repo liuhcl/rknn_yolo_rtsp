@@ -1,0 +1,6 @@
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/CMakeFiles/rebuild_cache.dir
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/CMakeFiles/edit_cache.dir
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/CMakeFiles/rknn_yolov8_demo.dir
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/mpp_enc/CMakeFiles/rebuild_cache.dir
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/mpp_enc/CMakeFiles/edit_cache.dir
+/home/cat/mpp/rknn_yolo_rtsp/rknn_yolov8_demo/build/mpp_enc/CMakeFiles/mpp_enc.dir

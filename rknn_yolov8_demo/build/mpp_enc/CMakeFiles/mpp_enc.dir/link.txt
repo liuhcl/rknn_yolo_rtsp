@@ -1,0 +1,2 @@
+/usr/bin/aarch64-linux-gnu-ar qc libmpp_enc.a  CMakeFiles/mpp_enc.dir/mpp_enc.cc.o CMakeFiles/mpp_enc.dir/mpp_main.cc.o
+/usr/bin/aarch64-linux-gnu-ranlib libmpp_enc.a
