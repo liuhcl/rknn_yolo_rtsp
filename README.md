@@ -1,8 +1,12 @@
 # 支持yolov8识别火焰，并推流
 - 拉流仓库地址：https://github.com/liuhcl/qt_pull_stream 如果不想配置qt环境，你也可以选择其他的播放器，VLC，ffplay命令（不过这两个延迟会很高）
 - 默认推流地址：rtmp://你的ip地址/live/stream/（ffmpeg） rtsp://你的ip地址/live/stream/（rtsp）
-- 该项目使用了两种方式推流，都是mpp h264编码（mpp是从官方移植过来的，删除了一些没用的），720p图像延迟200ms左右，稳定30帧
+- 该项目使用了两种方式推流，都是mpp h264编码（mpp是从官方移植过来的，删除了一些没用的），720p图像延迟190ms左右，不做推理的话应该会低一点140ms，稳定30帧
 - （可能看网络环境，对比在HI3518上测试过延时，延迟确实太高了，还是在局域网内测试的；能力有限，不知道怎么优化；希望有大佬能提供思路）
+- 不跑识别
+![alt text](readmeImg/no_yolo.png)
+- 跑识别
+![alt text](readmeImg/no_yolo.png)
 # 推流方式：
 - 一种是ffmpeg + nginx（需要配置环境，先执行nginx，记得配置nginx的rtmp）
 - 一种是从HI3518移植的rtsp服务器（可直接执行，还以为能够降低延迟，然而还是一样的，但是HI3518延迟就很低100ms内）

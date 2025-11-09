@@ -23,6 +23,12 @@
 #include <vector>
 #include <string>
 #include <stdbool.h>
+#include <linux/videodev2.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 
 #define _BASETSD_H
 
@@ -56,60 +62,20 @@
 #include "resize_function.h"
 #include "rknn_demo_utils.h"
 #include "mpp_main.h"
+#include "rknnPool.hpp"
+#include "ThreadPool.hpp"
+
+#define THREAD_COUNT 1
+#define VIDEO_DEVICE "/dev/video11" // 视频设备文件
+#define FRAMEBUFFER_COUNT 4 //帧缓冲数量
+
+using std::time;
+using std::queue;
+using std::vector;
 
 using namespace cv;	    //OpenCV标准库
 #define FMT_NUM_PLANES  1
 #define RKNN_MODEL_PATH "../yolov8_demo/model/yolov8n_relu.rknn"
-
-/*rtsp推流线程*/
-static pthread_mutex_t rtsp_mutex; //定义互斥锁
-static pthread_cond_t rtsp_cond; //定义条件变量
-Mat rknn_img;               //全局共享资源
-static void *rtsp_thread(void *arg)
-{
-    mpp_main *my_mpp = new mpp_main();
-    printf("creat mpp object success\n");
-    for (; ;) {
-        pthread_mutex_lock(&rtsp_mutex);//上锁
-        while (rknn_img.empty())
-            pthread_cond_wait(&rtsp_cond, &rtsp_mutex);//等待条件满足
-
-        my_mpp->push_stream(rknn_img.data);
-
-        rknn_img.release();// 释放内存
-        pthread_mutex_unlock(&rtsp_mutex);//解锁
-    }
-}
-
-static void creat_rtsp_thread()
-{
-    pthread_t tid;
-    int ret;
-    /* 初始化互斥锁和条件变量 */
-    pthread_mutex_init(&rtsp_mutex, NULL);
-    pthread_cond_init(&rtsp_cond, NULL);
-    /* 创建新线程 */
-    ret = pthread_create(&tid, NULL, rtsp_thread, NULL);
-    if (ret) {
-        fprintf(stderr, "pthread_create error: %s\n", strerror(ret));
-        exit(-1);
-    }
-}
-
-#include <linux/videodev2.h>
-#include <string.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-
-
-#define THREAD_COUNT 3
-#define VIDEO_DEVICE "/dev/video11" // 视频设备文件
-#define FRAMEBUFFER_COUNT 3 //帧缓冲数量
-
-using std::time;
 
 /*** 描述一个帧缓冲的信息 ***/
 typedef struct cam_buf_info {
@@ -265,10 +231,48 @@ static int v4l2_stream_on(void)
     return 0;
 }
 
-#include "rknnPool.hpp"
-#include "ThreadPool.hpp"
-using std::queue;
-using std::vector;
+/*rtsp推流线程*/
+static pthread_mutex_t rtsp_mutex; //定义互斥锁
+static pthread_cond_t rtsp_cond; //定义条件变量
+Mat rknn_img;               //全局共享资源
+// 存储多个rknn模型的实例
+vector<rknn_lite *> rkpool;
+// 线程池
+dpool::ThreadPool pool(THREAD_COUNT);
+// 线程队列
+queue<std::future<Mat>> futs;
+
+static void *rtsp_thread(void *arg)
+{
+    mpp_main *my_mpp = new mpp_main();
+    printf("creat mpp object success\n");
+    for (; ;) {
+        pthread_mutex_lock(&rtsp_mutex);//上锁
+        while (rknn_img.empty())
+            pthread_cond_wait(&rtsp_cond, &rtsp_mutex);//等待条件满足
+
+        my_mpp->push_stream(rknn_img.data);
+
+        rknn_img.release();// 释放内存
+        pthread_mutex_unlock(&rtsp_mutex);//解锁
+    }
+}
+
+static void creat_rtsp_thread()
+{
+    pthread_t tid;
+    int ret;
+    /* 初始化互斥锁和条件变量 */
+    pthread_mutex_init(&rtsp_mutex, NULL);
+    pthread_cond_init(&rtsp_cond, NULL);
+    /* 创建新线程 */
+    ret = pthread_create(&tid, NULL, rtsp_thread, NULL);
+    if (ret) {
+        fprintf(stderr, "pthread_create error: %s\n", strerror(ret));
+        exit(-1);
+    }
+}
+
 int main(int argc, char **argv)
 {
     /*时间*/
@@ -276,6 +280,8 @@ int main(int argc, char **argv)
     gettimeofday(&time, nullptr);
     long tmpTime, lopTime = time.tv_sec * 1000 + time.tv_usec / 1000;
     int to_bgr_success = 0;
+    int frame_num = 0;
+    int thread_index = 0;
 
     /* 初始化摄像头 */
     if (v4l2_dev_init(VIDEO_DEVICE))
@@ -306,16 +312,6 @@ int main(int argc, char **argv)
     buf.m.planes = planes;
     buf.length = FMT_NUM_PLANES;
 
-    int frame_num = 0;
-    int thread_index = 0;
-
-    // 存储多个rknn模型的实例
-    vector<rknn_lite *> rkpool;
-    // 线程池
-    dpool::ThreadPool pool(THREAD_COUNT);
-    // 线程队列
-    queue<std::future<Mat>> futs;
-
     //初始化
     ioctl(v4l2_fd, VIDIOC_DQBUF, &buf); //出队
     printf("yuv420 buf length:%d\n", buf_infos[0].length);
@@ -323,32 +319,18 @@ int main(int argc, char **argv)
     yuv420_to_bgr888(nv12_buf, bgr_buf);
     ori_img_bgr.data = bgr_buf;
     //imwrite("output_image.jpg", ori_img_bgr);
-
     ioctl(v4l2_fd, VIDIOC_QBUF, &buf); // 数据处理完之后、再入队、往复
-    for (int j = 0; j < THREAD_COUNT; j++)
-    {
+    for (int j = 0; j < THREAD_COUNT; j++) {
         rknn_lite *ptr = new rknn_lite(RKNN_MODEL_PATH, j % THREAD_COUNT);
         rkpool.push_back(ptr);
         ptr->ori_img = ori_img_bgr;
-    /*
-        rknn_lite::interf()这个函数是rknn_lite类的一个成员函数，它用来执行模型的推理，并返回推理结果。
-        它没有传入任何参数，但是它需要一个隐含的参数，就是rknn_lite类的对象指针（this pointer）。
-        这个指针指向调用这个函数的对象，可以访问对象的成员变量和成员函数。
-
-        当我们使用线程池对象pool的submit方法来提交任务时，我们需要传入一个可调用对象和一些参数。
-        这里我们传入了rknn_lite类的成员函数指针&rknn_lite::interf和ptr指针作为参数。
-        这样可以将rknn_lite类的interf方法绑定到ptr指针指向的对象上，并提交给线程池执行。
-
-        ptr指针的作用就是作为rknn_lite::interf()函数的隐含参数，让它知道要对哪个对象进行推理。
-        如果不传入ptr指针，就无法确定要调用哪个对象的interf方法，也就无法执行任务。
-    */
-        futs.push(pool.submit(&rknn_lite::interf, ptr)); //&(*ptr)-->ptr
+        futs.push(pool.submit(&rknn_lite::interf, ptr)); 
         sleep(1);
     }
     printf("ThreadPool init success\n");
+
     creat_rtsp_thread();
     sleep(3);
-    //printf("creat rtsp thread success\n");
     for( ; ; ) {
         for(buf.index = 0; buf.index < FRAMEBUFFER_COUNT; buf.index++) {
             ioctl(v4l2_fd, VIDIOC_DQBUF, &buf); //出队
