@@ -6,7 +6,7 @@
 - 不跑识别
 ![alt text](readmeImg/no_yolo.png)
 - 跑识别
-![alt text](readmeImg/no_yolo.png)
+![alt text](readmeImg/yolo.png)
 # 推流方式：
 - 一种是ffmpeg + nginx（需要配置环境，先执行nginx，记得配置nginx的rtmp）
 - 一种是从HI3518移植的rtsp服务器（可直接执行，还以为能够降低延迟，然而还是一样的，但是HI3518延迟就很低100ms内）
