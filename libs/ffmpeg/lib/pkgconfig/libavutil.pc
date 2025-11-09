@@ -1,0 +1,14 @@
+prefix=/usr/local/my/ffmpeg
+exec_prefix=${prefix}
+libdir=/usr/local/my/ffmpeg/lib
+includedir=/usr/local/my/ffmpeg/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 58.32.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil -pthread -lm -L/usr/local/my/libdrm/lib -ldrm -latomic -lX11
+Libs.private: 
+Cflags: -I${includedir}
